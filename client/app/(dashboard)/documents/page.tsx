@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UploadCloud, FileText, Loader2, Trash2, MoreVertical, Download, Edit2, Info } from "lucide-react";
@@ -37,11 +37,50 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+// ─── Status Badge ─────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
+  uploaded:      { label: "Uploaded",   className: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
+  extracting:    { label: "Extracting", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" },
+  chunking:      { label: "Chunking",   className: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" },
+  storing_chunks:{ label: "Indexing",   className: "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" },
+  processed:     { label: "Ready",      className: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300" },
+  failed:        { label: "Failed",     className: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status, className: "bg-muted text-muted-foreground" };
+  const isActive = !["processed", "failed", "uploaded"].includes(status);
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
+      {isActive && <span className="h-1.5 w-1.5 rounded-full bg-current animate-pulse" />}
+      {cfg.label}
+    </span>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function DocumentsPage() {
+  const queryClient = useQueryClient();
   const { data, isLoading } = useDocuments();
   const uploadDoc = useUploadDocument();
   const renameDoc = useRenameDocument();
-  const queryClient = useQueryClient();
+  
+  // Poll every 3s when any document is still being processed
+  useEffect(() => {
+    const processingDocs = data?.items?.filter(
+      (d) => !["processed", "failed"].includes(d.processing_status)
+    );
+    if (!processingDocs || processingDocs.length === 0) return;
+
+    const interval = setInterval(() => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [data, queryClient]);
+
 
   const [isDragging, setIsDragging] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -244,9 +283,9 @@ export default function DocumentsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="flex-1">
-                  <div className="text-xs text-muted-foreground flex items-center justify-between mt-2">
-                    <span className="capitalize">{doc.processing_status.replace('_', ' ')}</span>
-                    <span>{(doc.size / 1024).toFixed(1)} KB</span>
+                  <div className="flex items-center justify-between mt-2">
+                    <StatusBadge status={doc.processing_status} />
+                    <span className="text-xs text-muted-foreground">{(doc.size / 1024).toFixed(1)} KB</span>
                   </div>
                   <div className="text-xs text-muted-foreground mt-1">
                     {format(new Date(doc.created_at), "MMM d, yyyy")}

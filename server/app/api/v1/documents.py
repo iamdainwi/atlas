@@ -1,24 +1,22 @@
 """
 Document routes — /api/v1/documents/*
-
-Upload (POST /documents) will be fully implemented in Phase 4/5.
 """
 
 from fastapi import APIRouter, Depends, Query, status, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.common import ApiResponse, success_response
-from app.schemas.document import DocumentListResponse, DocumentRead, DocumentRename
+from app.schemas.document import DocumentListResponse, DocumentRead, DocumentRename, ProcessingJobRead
 from app.services.document import (
-    get_document, 
-    list_documents, 
-    remove_document, 
+    get_document,
+    list_documents,
+    remove_document,
     rename_document,
     upload_document,
-    get_document_file_path
+    get_document_presigned_url,
 )
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -30,6 +28,7 @@ def upload(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Upload a document to S3 and kick off the processing pipeline."""
     doc = upload_document(db, current_user, file)
     return success_response(DocumentRead.model_validate(doc))
 
@@ -66,13 +65,31 @@ def download(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    file_path = get_document_file_path(db, current_user, document_id)
-    doc = get_document(db, current_user, document_id)
-    return FileResponse(
-        path=file_path, 
-        filename=doc.filename,
-        media_type="application/octet-stream"
+    """Redirect the browser to a short-lived S3 presigned URL."""
+    presigned_url = get_document_presigned_url(db, current_user, document_id)
+    return RedirectResponse(url=presigned_url)
+
+
+@router.get("/{document_id}/status", response_model=ApiResponse[ProcessingJobRead])
+def get_processing_status(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return the latest processing job status for a document."""
+    from app.models.processing_job import ProcessingJob
+    # Ensure user owns the document
+    get_document(db, current_user, document_id)
+    job = (
+        db.query(ProcessingJob)
+        .filter(ProcessingJob.document_id == document_id)
+        .order_by(ProcessingJob.started_at.desc())
+        .first()
     )
+    if not job:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No processing job found for this document.")
+    return success_response(ProcessingJobRead.model_validate(job))
 
 
 @router.patch("/{document_id}", response_model=ApiResponse[DocumentRead])
@@ -92,5 +109,6 @@ def delete(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Delete from DB and S3."""
     remove_document(db, current_user, document_id)
     return None

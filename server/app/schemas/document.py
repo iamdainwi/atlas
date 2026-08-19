@@ -33,4 +33,17 @@ class DocumentListResponse(BaseModel):
     limit: int
 
 
-__all__ = ["DocumentRead", "DocumentRename", "DocumentListResponse"]
+class ProcessingJobRead(BaseModel):
+    id: str
+    document_id: str
+    status: str
+    progress: int
+    current_step: str | None
+    error_message: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+
+
+__all__ = ["DocumentRead", "DocumentRename", "DocumentListResponse", "ProcessingJobRead"]
