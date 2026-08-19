@@ -30,7 +30,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {docsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (documentsData?.data?.total || 0)}
+              {docsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : (documentsData?.total || 0)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Documents in your library

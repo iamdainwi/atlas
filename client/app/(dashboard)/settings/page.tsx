@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useState } from "react";
@@ -22,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function SettingsPage() {
-  const { user, refetchUser, isLoading: authLoading } = useAuth();
+  const { user, refetchUser, isLoading: authLoading, logout } = useAuth();
 
   // Profile State
   const [name, setName] = useState(user?.name || "");
@@ -116,7 +117,7 @@ export default function SettingsPage() {
   if (authLoading) {
     return (
       <div className="flex h-[calc(100vh-8rem)] items-center justify-center text-muted-foreground">
-        <Spinner size={32} />
+        <Spinner className="size-8" />
       </div>
     );
   }
